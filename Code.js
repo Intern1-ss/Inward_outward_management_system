@@ -9,8 +9,87 @@ const CONFIG = {
   NOTIFICATION_SUBJECT:"Inward/Outward Pending Report",
   TRIGGER_FUNCTION_NAME:'sendWeeklyPendingReport'
 };
+//Fix_2
+const COLUMNS = {
+  INWARD: {
+    SL_NO: 0,
+    MEANS: 1,
+    INWARD_NO: 2,
+    FROM_WHOM: 3,
+    SUBJECT: 4,
+    TAKEN_BY: 5,
+    DATE_TIME: 6,
+    ACTION_TAKEN: 7,
+    FILE_REF: 8,
+    POSTAL_TARIFF: 9
+  },
+  OUTWARD: {
+    SL_NO: 0,
+    MEANS: 1,
+    OUTWARD_NO: 2,
+    TO_WHOM: 3,
+    SUBJECT: 4,
+    SENT_BY: 5,
+    DATE_TIME: 6,
+    CASE_CLOSED: 7,
+    FILE_REF: 8,
+    POSTAL_TARIFF: 9,
+    DUE_DATE: 10
+  }
+};
 
+const CACHE_KEYS = {
+  CONFIRMATIONS: 'confirmations_v1',
+  LINKS: 'links_v1',
+  ENTRIES: 'entries_v1',
+  STATS: 'stats_v1'
+};
 
+const CACHE_DURATION = 300; // 5 minutes in seconds
+
+function getCachedData(key) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get(key);
+    if (cached) {
+      Logger.log(`Cache HIT: ${key}`);
+      return JSON.parse(cached);
+    }
+    Logger.log(`Cache MISS: ${key}`);
+    return null;
+  } catch (error) {
+    Logger.log(`Cache error: ${error.toString()}`);
+    return null;
+  }
+}
+
+function setCachedData(key, data) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.put(key, JSON.stringify(data), CACHE_DURATION);
+    Logger.log(`Cache SET: ${key}`);
+  } catch (error) {
+    Logger.log(`Cache set error: ${error.toString()}`);
+  }
+}
+
+function clearCache(keys = null) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (keys) {
+      if (Array.isArray(keys)) {
+        keys.forEach(key => cache.remove(key));
+      } else {
+        cache.remove(keys);
+      }
+    } else {
+      cache.removeAll(Object.values(CACHE_KEYS));
+    }
+    Logger.log('Cache cleared');
+  } catch (error) {
+    Logger.log(`Cache clear error: ${error.toString()}`);
+  }
+}
 // =====================================================
 // WEB APP ENTRY POINT
 // =====================================================
@@ -530,6 +609,7 @@ function loadEntriesFromSheet(ss, sheetName, userEmail, isAdmin) {
   return entries;
 }
 
+//Fix_4
 function loadEntriesWithStatus(ss, sheetName, entryType, userEmail, isAdmin, confirmations, links) {
   const entries = [];
   
@@ -539,32 +619,33 @@ function loadEntriesWithStatus(ss, sheetName, entryType, userEmail, isAdmin, con
       return entries;
     }
     
-    const data = sheet.getDataRange().getValues();
+    const lastRow = sheet.getLastRow();
+    const COL = COLUMNS[entryType.toUpperCase()];
+    
+    // ✅ Read only necessary columns based on entry type
+    const numColumns = entryType === 'Inward' ? 10 : 11;
+    const data = sheet.getRange(2, 1, lastRow - 1, numColumns).getValues();
     const userEmailLower = (userEmail || '').toLowerCase();
     
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 0; i < data.length; i++) {
       const row = data[i];
       
-      // Must have at least subject to be valid
-      if (!row[4]) continue;
+      // ✅ Use column constants instead of magic numbers
+      if (!row[COL.SUBJECT]) continue;
       
-      const rowUserEmail = row[5] ? row[5].toString().toLowerCase() : '';
+      const rowUserEmail = row[COL.TAKEN_BY] ? row[COL.TAKEN_BY].toString().toLowerCase() : '';
       
-      // Simplified permission - show entries to everyone (remove admin filtering)
-      // You can add back permission filtering here if needed later
+      const entryId = `${sheetName}-${i + 2}`; // i + 2 because we start from row 2
       
-      const entryId = `${sheetName}-${i + 1}`;
+      // ✅ Strict completeness check using column constants
+      const hasRequiredFields = !!(row[COL.MEANS] && row[COL.SUBJECT]);
+      const hasDateTime = !!row[COL.DATE_TIME];
+      const hasUserInfo = !!row[COL.TAKEN_BY];
       
-      // FIXED: Strict completeness check
-      const hasRequiredFields = !!(row[1] && row[3] && row[4]); // Means, Person, Subject
-      const hasDateTime = !!row[6]; // Date & Time
-      const hasUserInfo = !!row[5]; // Taken By / Sent By
-      
-      // Entry is complete ONLY if ALL required fields are present
       const isComplete = hasRequiredFields && hasDateTime && hasUserInfo;
       
-      // Check if entry is confirmed using simplified key
-      const confirmKey = `${sheetName}-${i + 1}`;
+      // Check if entry is confirmed
+      const confirmKey = `${sheetName}-${i + 2}`;
       const isConfirmed = confirmations.has(confirmKey);
       
       // Get linked entries
@@ -574,9 +655,9 @@ function loadEntriesWithStatus(ss, sheetName, entryType, userEmail, isAdmin, con
       // Format date
       let formattedDateTime = '';
       try {
-        if (row[6]) {
-          if (row[6] instanceof Date) {
-            formattedDateTime = row[6].toLocaleString('en-US', {
+        if (row[COL.DATE_TIME]) {
+          if (row[COL.DATE_TIME] instanceof Date) {
+            formattedDateTime = row[COL.DATE_TIME].toLocaleString('en-US', {
               year: 'numeric',
               month: 'short',
               day: '2-digit',
@@ -584,38 +665,41 @@ function loadEntriesWithStatus(ss, sheetName, entryType, userEmail, isAdmin, con
               minute: '2-digit'
             });
           } else {
-            formattedDateTime = new Date(row[6]).toLocaleString();
+            formattedDateTime = new Date(row[COL.DATE_TIME]).toLocaleString();
           }
         }
       } catch (dateError) {
-        formattedDateTime = row[6] ? row[6].toString() : '';
+        formattedDateTime = row[COL.DATE_TIME] ? row[COL.DATE_TIME].toString() : '';
       }
       
+      // ✅ Build entry object using column constants
       const entry = {
         id: entryId,
         type: entryType,
-        subject: (row[4] || '').toString(),
-        person: (row[3] || '').toString(),
-        user: (row[5] || '').toString(),
+        subject: (row[COL.SUBJECT] || '').toString(),
+        person: (row[entryType === 'Inward' ? COL.FROM_WHOM : COL.TO_WHOM] || '').toString(),
+        user: (row[COL.TAKEN_BY] || '').toString(),
         dateTime: formattedDateTime,
-        means: (row[1] || '').toString(),
-        fileReference: (row[8] || '').toString(),
-        postalTariff: row[9] || '',
-        complete: isComplete, // This will now be more strict
+        means: (row[COL.MEANS] || '').toString(),
+        fileReference: (row[COL.FILE_REF] || '').toString(),
+        postalTariff: row[COL.POSTAL_TARIFF] || '',
+        complete: isComplete,
         confirmed: isConfirmed,
         linkedEntries: linkedEntries,
-        hasLinks: hasLinks,
-        // Type-specific fields
-        ...(entryType === 'Inward' ? {
-          inwardNo: (row[2] || '').toString(),
-          fromWhom: (row[3] || '').toString(),
-          actionTaken: (row[7] || '').toString()
-        } : {
-          outwardNo: (row[2] || '').toString(),
-          toWhom: (row[3] || '').toString(),
-          caseClosed: (row[7] || 'No').toString()
-        })
+        hasLinks: hasLinks
       };
+      
+      // Add type-specific fields
+      if (entryType === 'Inward') {
+        entry.inwardNo = (row[COL.INWARD_NO] || '').toString();
+        entry.fromWhom = (row[COL.FROM_WHOM] || '').toString();
+        entry.actionTaken = (row[COL.ACTION_TAKEN] || '').toString();
+      } else {
+        entry.outwardNo = (row[COL.OUTWARD_NO] || '').toString();
+        entry.toWhom = (row[COL.TO_WHOM] || '').toString();
+        entry.caseClosed = (row[COL.CASE_CLOSED] || 'No').toString();
+        entry.dueDate = row[COL.DUE_DATE] || '';
+      }
       
       entries.push(entry);
     }
@@ -838,7 +922,14 @@ function formatDateTime(date) {
 // CONFIRMATION FUNCTIONS
 // =====================================================
 
+//Fix_3
 function getConfirmationsSimplified(ss) {
+  // ✅ Try cache first
+  const cached = getCachedData(CACHE_KEYS.CONFIRMATIONS);
+  if (cached) {
+    return new Map(Object.entries(cached));
+  }
+  
   const confirmations = new Map();
   
   try {
@@ -847,12 +938,15 @@ function getConfirmationsSimplified(ss) {
       return confirmations;
     }
     
-    const data = confirmSheet.getDataRange().getValues();
+    const lastRow = confirmSheet.getLastRow();
     
-    for (let i = 1; i < data.length; i++) {
+    // ✅ Only read necessary columns and rows
+    const data = confirmSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    
+    for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      if (row[2] && row[3]) { // sheetName and rowNumber exist
-        const key = `${row[2]}-${row[3]}`; // Format: "Inward-2"
+      if (row[2] && row[3]) { // sheetName and rowNumber
+        const key = `${row[2]}-${row[3]}`;
         confirmations.set(key, {
           date: row[0],
           userEmail: row[1],
@@ -868,12 +962,16 @@ function getConfirmationsSimplified(ss) {
     
     Logger.log(`Loaded ${confirmations.size} confirmations (simplified)`);
     
+    // ✅ Cache the result
+    setCachedData(CACHE_KEYS.CONFIRMATIONS, Object.fromEntries(confirmations));
+    
   } catch (error) {
     Logger.log('Error loading confirmations: ' + error.toString());
   }
   
   return confirmations;
 }
+
 
 function confirmEntry(entryId, confirmationNote = '') {
   try {
@@ -940,6 +1038,8 @@ function confirmEntry(entryId, confirmationNote = '') {
     confirmSheet.getRange(nextRow, 1, 1, confirmationRow.length).setValues([confirmationRow]);
     
     Logger.log(`Confirmation saved for ${entryId}`);
+
+    clearCache([CACHE_KEYS.CONFIRMATIONS, CACHE_KEYS.ENTRIES, CACHE_KEYS.STATS]);
     
     return {
       success: true,
@@ -1127,6 +1227,7 @@ function linkEntries(primaryEntryId, linkedEntryIds) {
     }
     
     Logger.log(`Successfully created ${linkResults.length * 2} links with UUID: ${linkGroupUUID}`);
+    clearCache([CACHE_KEYS.LINKS, CACHE_KEYS.ENTRIES]); //Fix_7
     Logger.log(`=== LINKING COMPLETE ===`);
     
     return {
@@ -1319,6 +1420,12 @@ function getLinkableEntries(currentEntryId) {
 }
 
 function getEntryLinks(ss) {
+  // ✅ Try cache first
+  const cached = getCachedData(CACHE_KEYS.LINKS);
+  if (cached) {
+    return new Map(Object.entries(cached).map(([k, v]) => [k, v]));
+  }
+  
   const links = new Map();
   
   try {
@@ -1328,12 +1435,15 @@ function getEntryLinks(ss) {
       return links;
     }
     
-    const data = linksSheet.getDataRange().getValues();
-    Logger.log(`Processing ${data.length - 1} link rows`);
+    const lastRow = linksSheet.getLastRow();
     
-    for (let i = 1; i < data.length; i++) {
+    // ✅ Only read necessary columns
+    const data = linksSheet.getRange(2, 1, lastRow - 1, 8).getValues();
+    Logger.log(`Processing ${data.length} link rows`);
+    
+    for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      if (row[1] && row[2]) { // Primary Entry ID and Linked Entry ID
+      if (row[1] && row[2]) { // primaryId and linkedId
         const primaryId = row[1];
         const linkedId = row[2];
         
@@ -1348,12 +1458,16 @@ function getEntryLinks(ss) {
           createdDate: row[4],
           createdBy: row[5],
           notes: row[6],
-          uuid: row[7] || '' // Link Group UUID
+          uuid: row[7] || ''
         });
       }
     }
     
     Logger.log(`Loaded links for ${links.size} entries`);
+    
+    // ✅ Cache the result
+    const cacheData = Object.fromEntries(links);
+    setCachedData(CACHE_KEYS.LINKS, cacheData);
     
   } catch (error) {
     Logger.log('Error loading entry links: ' + error.toString());
@@ -1466,11 +1580,19 @@ function calculateUserStats(ss, userEmail, isAdmin) {
   return { pending, confirmed };
 }
 
+//Fix_6
 function calculateSheetStats(ss, sheetName, userEmail, isAdmin, confirmations) {
   let pending = 0;
   let confirmed = 0;
   
   try {
+    // ✅ Try cache first
+    const cacheKey = `${CACHE_KEYS.STATS}_${sheetName}_${userEmail}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     Logger.log(`--- Processing ${sheetName} sheet ---`);
     
     const sheet = ss.getSheetByName(sheetName);
@@ -1480,23 +1602,33 @@ function calculateSheetStats(ss, sheetName, userEmail, isAdmin, confirmations) {
     }
     
     const lastRow = sheet.getLastRow();
-    Logger.log(`${sheetName} last row: ${lastRow}`);
-    
     if (lastRow <= 1) {
       Logger.log(`${sheetName} has no data rows`);
       return { pending, confirmed };
     }
     
-    const data = sheet.getDataRange().getValues();
+    const COL = COLUMNS[sheetName.toUpperCase()];
+    
+    // ✅ Only read necessary columns for stats calculation
+    const necessaryColumns = [
+      COL.MEANS,          // 1
+      COL.SUBJECT,        // 4
+      COL.TAKEN_BY,       // 5
+      COL.DATE_TIME,      // 6
+      COL.ACTION_TAKEN    // 7 (for Inward)
+    ];
+    
+    const numColumns = sheetName === 'Inward' ? 10 : 11;
+    const data = sheet.getRange(2, 1, lastRow - 1, numColumns).getValues();
     const userEmailLower = (userEmail || '').toLowerCase();
     
-    for (let i = 1; i < data.length; i++) {
+    for (let i = 0; i < data.length; i++) {
       const row = data[i];
       
       // Skip entries without subject
-      if (!row[4]) continue;
+      if (!row[COL.SUBJECT]) continue;
       
-      const rowUserEmail = row[5] ? row[5].toString().toLowerCase() : '';
+      const rowUserEmail = row[COL.TAKEN_BY] ? row[COL.TAKEN_BY].toString().toLowerCase() : '';
       
       // Permission check
       let shouldProcess = false;
@@ -1514,34 +1646,35 @@ function calculateSheetStats(ss, sheetName, userEmail, isAdmin, confirmations) {
         continue;
       }
       
-      // Check if entry is complete (has all required fields)
-      const isComplete = !!(row[1] && row[3] && row[4] && row[6]); // Means, Person, Subject, DateTime
+      // Check if entry is complete
+      const isComplete = !!(row[COL.MEANS] && row[COL.SUBJECT] && row[COL.DATE_TIME] && row[COL.TAKEN_BY]);
       
-      // Check if entry is confirmed (physically processed)
-      const confirmKey = `${sheetName}-${i + 1}`;
+      // Check if entry is confirmed
+      const confirmKey = `${sheetName}-${i + 2}`;
       const isConfirmed = confirmations.has(confirmKey);
       
-      // CORRECTED LOGIC:
       if (isConfirmed) {
-        // Entry is confirmed = Work Complete
         confirmed++;
       } else if (isComplete) {
-        // Entry is complete but not confirmed = Pending Work (ready for physical action)
         pending++;
       }
-      // Note: Incomplete entries (missing required fields) are not counted in either category
-      // This matches the display logic where incomplete entries show "Incomplete Data" status
     }
     
-    Logger.log(`${sheetName} CORRECTED SUMMARY:`);
-    Logger.log(`- Pending Work (complete but not confirmed): ${pending}`);
-    Logger.log(`- Work Complete (confirmed): ${confirmed}`);
+    Logger.log(`${sheetName} SUMMARY:`);
+    Logger.log(`- Pending Work: ${pending}`);
+    Logger.log(`- Work Complete: ${confirmed}`);
+    
+    const result = { pending, confirmed };
+    
+    // ✅ Cache the result
+    setCachedData(cacheKey, result);
+    
+    return result;
     
   } catch (error) {
     Logger.log(`Error calculating stats for ${sheetName}: ${error.toString()}`);
+    return { pending, confirmed };
   }
-  
-  return { pending, confirmed };
 }
 
 
@@ -1623,6 +1756,8 @@ function createNewEntry(entryType, entryData) {
     targetSheet.getRange(newRowNumber, 1, 1, rowData.length).setValues([rowData]);
     
     Logger.log(`Successfully created ${entryType} entry at row ${newRowNumber} with serial ${serialNumber}`);
+
+    clearCache([CACHE_KEYS.ENTRIES, CACHE_KEYS.STATS]);
     
     return {
       success: true,
@@ -1932,7 +2067,7 @@ function fixAllSerialNumbersAndCodes() {
   }
 }
 
-
+//Fix_5
 function searchInSheetSimplified(ss, sheetName, query, userEmail, isAdmin) {
   const results = [];
   
@@ -1946,110 +2081,75 @@ function searchInSheetSimplified(ss, sheetName, query, userEmail, isAdmin) {
     }
     
     const lastRow = sheet.getLastRow();
-    Logger.log(`${sheetName} last row: ${lastRow}`);
-    
     if (lastRow <= 1) {
       Logger.log(`${sheetName} has no data rows`);
       return results;
     }
     
-    // Get all data at once for efficiency
-    const data = sheet.getDataRange().getValues();
-    Logger.log(`Retrieved data array with ${data.length} rows`);
+    // ✅ Use TextFinder for efficient search
+    const searchRange = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
+    const textFinder = searchRange.createTextFinder(query);
+    textFinder.matchCase(false); // Case-insensitive
+    const foundRanges = textFinder.findAll();
     
-    // Log first few rows for debugging
-    if (data.length > 1) {
-      Logger.log(`Sample data row 1 (header): ${JSON.stringify(data[0])}`);
-      if (data.length > 2) {
-        Logger.log(`Sample data row 2: ${JSON.stringify(data[1])}`);
-      }
+    Logger.log(`TextFinder found ${foundRanges.length} matches`);
+    
+    if (foundRanges.length === 0) {
+      return results;
     }
     
-    const userEmailLower = userEmail.toLowerCase();
-    let processedRows = 0;
-    let matchedRows = 0;
+    // ✅ Only read rows that match
+    const matchedRows = new Set();
+    foundRanges.forEach(range => {
+      matchedRows.add(range.getRow());
+    });
     
-    for (let i = 1; i < data.length; i++) { // Skip header row
-      processedRows++;
-      const row = data[i];
-      
-      // Check if row has basic required data
-      if (!row || row.length < 6) {
-        Logger.log(`Row ${i + 1} has insufficient data: ${row.length} columns`);
-        continue;
-      }
-      
-      // Get the user who created this entry (column index 5 = "Taken By" or "Sent By")
-      const rowUserEmail = row[5] ? row[5].toString().toLowerCase() : '';
-      
-      // For debugging - log a few entries
-      if (i <= 3) {
-        Logger.log(`Row ${i + 1} user: "${rowUserEmail}", current user: "${userEmailLower}"`);
-      }
-      
-      // Permission check - skip if not admin and entry doesn't belong to current user
-      // BUT: Let's temporarily allow all entries for debugging
-      // if (!isAdmin && rowUserEmail !== userEmailLower) {
-      //   continue;
-      // }
-      
-      // Create searchable text from all relevant fields
-      const searchableText = [
-        row[1] || '', // Means
-        row[2] || '', // Inward/Outward No
-        row[3] || '', // From/To
-        row[4] || '', // Subject
-        row[5] || '', // Taken/Sent By
-        row[7] || '', // Action Taken/Case Closed
-        row[8] || '', // File Reference
-      ].join(' ').toLowerCase();
-      
-      // Check if query matches
-      if (searchableText.includes(query)) {
-        matchedRows++;
-        
-        // Log the match for debugging
-        if (matchedRows <= 3) {
-          Logger.log(`Match found in row ${i + 1}: "${searchableText.substring(0, 100)}..."`);
-        }
-        
-        const entryId = `${sheetName}-${i + 1}`;
-        
-        const entry = {
-          id: entryId,
-          type: sheetName,
-          subject: row[4] || '',
-          person: row[3] || '',
-          user: row[5] || '',
-          dateTime: row[6] ? formatDateTime(row[6]) : '',
-          means: row[1] || '',
-          fileReference: row[8] || '',
-          postalTariff: row[9] || '',
-          complete: !!(row[1] && row[3] && row[4] && row[6]), // Basic completeness check
-          confirmed: false, // We'll determine this later if needed
-          linkedEntries: [], // We'll populate this later if needed
-          relevanceScore: 100, // Simple scoring for now
-          // Additional fields for display
-          ...(sheetName === 'Inward' ? {
-            inwardNo: row[2] || '',
-            fromWhom: row[3] || '',
-            actionTaken: row[7] || ''
-          } : {
-            outwardNo: row[2] || '',
-            toWhom: row[3] || '',
-            caseClosed: row[7] || 'No'
-          })
-        };
-        
-        results.push(entry);
-      }
-    }
+    const COL = COLUMNS[sheetName.toUpperCase()];
+    const numColumns = sheetName === 'Inward' ? 10 : 11;
     
-    Logger.log(`${sheetName} - Processed: ${processedRows} rows, Matched: ${matchedRows} rows`);
+    // ✅ Read only matched rows
+    matchedRows.forEach(rowNum => {
+      const row = sheet.getRange(rowNum, 1, 1, numColumns).getValues()[0];
+      
+      if (!row[COL.SUBJECT]) return; // Skip if no subject
+      
+      const entryId = `${sheetName}-${rowNum}`;
+      
+      // Build entry object using column constants
+      const entry = {
+        id: entryId,
+        type: sheetName,
+        subject: row[COL.SUBJECT] || '',
+        person: row[sheetName === 'Inward' ? COL.FROM_WHOM : COL.TO_WHOM] || '',
+        user: row[COL.TAKEN_BY] || '',
+        dateTime: row[COL.DATE_TIME] ? formatDateTime(row[COL.DATE_TIME]) : '',
+        means: row[COL.MEANS] || '',
+        fileReference: row[COL.FILE_REF] || '',
+        postalTariff: row[COL.POSTAL_TARIFF] || '',
+        complete: !!(row[COL.MEANS] && row[COL.SUBJECT] && row[COL.DATE_TIME] && row[COL.TAKEN_BY]),
+        confirmed: false,
+        linkedEntries: [],
+        relevanceScore: 100
+      };
+      
+      // Add type-specific fields
+      if (sheetName === 'Inward') {
+        entry.inwardNo = row[COL.INWARD_NO] || '';
+        entry.fromWhom = row[COL.FROM_WHOM] || '';
+        entry.actionTaken = row[COL.ACTION_TAKEN] || '';
+      } else {
+        entry.outwardNo = row[COL.OUTWARD_NO] || '';
+        entry.toWhom = row[COL.TO_WHOM] || '';
+        entry.caseClosed = row[COL.CASE_CLOSED] || 'No';
+      }
+      
+      results.push(entry);
+    });
+    
+    Logger.log(`${sheetName} - Found ${results.length} matching entries`);
     
   } catch (error) {
     Logger.log(`Error searching in ${sheetName}: ${error.toString()}`);
-    Logger.log(`Error stack: ${error.stack}`);
   }
   
   return results;
@@ -3067,6 +3167,8 @@ function updateEntry(updatedData) {
     sheet.getRange(rowNumber, 1, 1, rowData.length).setValues([rowData]);
     
     Logger.log(`Successfully updated ${updatedData.type} entry at row ${rowNumber}`);
+
+    clearCache([CACHE_KEYS.ENTRIES, CACHE_KEYS.STATS]); //Fix_8
     
     return {
       success: true,
@@ -3479,6 +3581,42 @@ function generateFinancialReport(dateFrom, dateTo) {
     Logger.log(`Error generating financial report: ${error.toString()}`);
     return { success: false, message: error.toString() };
   }
+}
+
+function testPerformanceImprovements() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  Logger.log('=== PERFORMANCE TEST ===');
+  
+  // Clear cache first
+  clearCache();
+  
+  // Test 1: Confirmations (cold cache)
+  let start = new Date().getTime();
+  let confirmations = getConfirmationsSimplified(ss);
+  let duration = new Date().getTime() - start;
+  Logger.log(`Confirmations (cold): ${duration}ms, Size: ${confirmations.size}`);
+  
+  // Test 2: Confirmations (warm cache)
+  start = new Date().getTime();
+  confirmations = getConfirmationsSimplified(ss);
+  duration = new Date().getTime() - start;
+  Logger.log(`Confirmations (warm): ${duration}ms, Size: ${confirmations.size}`);
+  
+  // Test 3: Links (cold cache)
+  clearCache(CACHE_KEYS.LINKS);
+  start = new Date().getTime();
+  let links = getEntryLinks(ss);
+  duration = new Date().getTime() - start;
+  Logger.log(`Links (cold): ${duration}ms, Size: ${links.size}`);
+  
+  // Test 4: Links (warm cache)
+  start = new Date().getTime();
+  links = getEntryLinks(ss);
+  duration = new Date().getTime() - start;
+  Logger.log(`Links (warm): ${duration}ms, Size: ${links.size}`);
+  
+  Logger.log('=== TEST COMPLETE ===');
 }
 
 

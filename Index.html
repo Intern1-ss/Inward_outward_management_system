@@ -3086,7 +3086,7 @@ function displayLinkedEntriesHorizontally(linkedEntries) {
     document.getElementById('currentEntryForLinking').innerHTML = `
         <h5 style="color: #1e293b; margin-bottom: 4px;">
             <span class="entry-number">${entryNumber}</span>
-            ${entry.type}: ${entry.subject}
+            ${entry.type}: ${escapeHtml(entry.subject)} //Fix_1
         </h5>
         <p style="color: #64748b; font-size: 0.875rem; margin: 0;">
             ${entry.type === 'Inward' ? 'From' : 'To'}: ${entry.person} | ${entry.dateTime}
