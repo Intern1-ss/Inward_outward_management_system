@@ -1367,37 +1367,38 @@
             
             <!-- Outward specific fields -->
             <div class="form-group" id="outwardNoGroup" style="display: none;">
-                <label for="outwardNo">Outward No (Auto-Generated)</label>
-                <input type="text" id="outwardNo" name="outwardNo" placeholder="Will be auto-generated: OTW/2025/XXX" readonly style="background-color: #f8fafc; color: #64748b;">
-            </div>
-            <div class="form-group" id="toWhomGroup" style="display: none;">
-                <label for="toWhom" class="required">To Whom</label>
-                <input type="text" id="toWhom" name="toWhom" placeholder="Enter recipient details">
-            </div>
-            <div class="form-group" id="sentByGroup" style="display: none;">
-                <label for="sentBy" class="required">Sent By</label>
-                <input type="text" id="sentBy" name="sentBy" placeholder="Enter your name">
-            </div>
-            <div class="form-group" id="caseClosedGroup" style="display: none;">
-                <label for="caseClosed">Case Closed</label>
-                <select id="caseClosed" name="caseClosed">
-                    <option value="No">No</option>
-                    <option value="Yes">Yes</option>
-                </select>
-            </div>
+            <label for="outwardNo">Outward No (Auto-Generated)</label>
+            <input type="text" id="outwardNo" name="outwardNo" placeholder="Will be auto-generated: OTW/2025/XXX" readonly style="background-color: #f8fafc; color: #64748b;">
+        </div>
+        <div class="form-group" id="toWhomGroup" style="display: none;">
+            <label for="toWhom" class="required">To Whom</label>
+            <input type="text" id="toWhom" name="toWhom" placeholder="Enter recipient details" required>
+        </div>
+        <div class="form-group" id="sentByGroup" style="display: none;">
+            <label for="sentBy" class="required">Sent By</label>
+            <input type="text" id="sentBy" name="sentBy" placeholder="Enter your name" required>
+        </div>
+        <div class="form-group" id="caseClosedGroup" style="display: none;">
+            <label for="caseClosed" class="required">Case Closed</label>
+            <select id="caseClosed" name="caseClosed" required>
+                <option value="">Select status</option>
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+            </select>
+        </div>
 
-            <div class="form-group" id="dueDateGroup" style="display: none;">
-                <label for="dueDate">Due Date</label>
-                <input type="date" id="dueDate" name="dueDate" placeholder="Select due date">
-            </div>
+        <div class="form-group" id="dueDateGroup" style="display: none;">
+            <label for="dueDate" class="required">Due Date</label>
+            <input type="date" id="dueDate" name="dueDate" placeholder="Select due date" required>
+        </div>
 
             <!-- Common fields -->
             <div class="form-group">
-                <label for="fileReference">File Reference</label>
+                <label for="fileReference" id="fileRefLabel">File Reference</label>
                 <input type="text" id="fileReference" name="fileReference" placeholder="Enter file reference">
             </div>
             <div class="form-group">
-                <label for="postalTariff">Postal Tariff</label>
+                <label for="postalTariff" id="postalTariffLabel">Postal Tariff</label>
                 <input type="number" id="postalTariff" name="postalTariff" step="0.01" placeholder="Enter amount">
             </div>
             
@@ -1472,24 +1473,26 @@
                 <input type="text" id="editSentBy" name="sentBy" placeholder="Enter your name">
             </div>
             <div class="form-group" id="editCaseClosedGroup" style="display: none;">
-                <label for="editCaseClosed">Case Closed</label>
-                <select id="editCaseClosed" name="caseClosed">
+                <label for="editCaseClosed" class="required">Case Closed</label>
+                <select id="editCaseClosed" name="caseClosed" required>
+                    <option value="">Select status</option>
                     <option value="No">No</option>
                     <option value="Yes">Yes</option>
                 </select>
             </div>
+            </div>
             <div class="form-group" id="editDueDateGroup" style="display: none;">
-                <label for="editDueDate">Due Date</label>
-                <input type="date" id="editDueDate" name="dueDate" placeholder="Select due date">
+                <label for="editDueDate" class="required">Due Date</label>
+                <input type="date" id="editDueDate" name="dueDate" required>
             </div>
 
             <!-- Common fields -->
             <div class="form-group">
-                <label for="editFileReference">File Reference</label>
+                <label for="editFileReference" id="editFileRefLabel">File Reference</label>
                 <input type="text" id="editFileReference" name="fileReference" placeholder="Enter file reference">
             </div>
             <div class="form-group">
-                <label for="editPostalTariff">Postal Tariff</label>
+                <label for="editPostalTariff" id="editPostalTariffLabel">Postal Tariff</label>
                 <input type="number" id="editPostalTariff" name="postalTariff" step="0.01" placeholder="Enter amount">
             </div>
             
@@ -1748,6 +1751,10 @@ function toggleFormFields(entryType) {
     const inwardFields = ['inwardNoGroup', 'fromWhomGroup', 'takenByGroup', 'actionTakenGroup'];
     const outwardFields = ['outwardNoGroup', 'toWhomGroup', 'sentByGroup', 'caseClosedGroup', 'dueDateGroup'];
     
+    // Get label elements for conditional required marking
+    const fileRefLabel = document.getElementById('fileRefLabel');
+    const postalTariffLabel = document.getElementById('postalTariffLabel');
+    
     if (entryType === 'Inward') {
         // Show inward fields
         inwardFields.forEach(id => {
@@ -1761,11 +1768,26 @@ function toggleFormFields(entryType) {
             if (element) element.style.display = 'none';
         });
         
-        // Set required attributes
+        // Set required attributes for Inward
         setFieldRequired('fromWhom', true);
         setFieldRequired('takenBy', true);
         setFieldRequired('toWhom', false);
         setFieldRequired('sentBy', false);
+        setFieldRequired('caseClosed', false);
+        setFieldRequired('dueDate', false);
+        setFieldRequired('fileReference', false);
+        setFieldRequired('postalTariff', false);
+        
+        // Update labels
+        if (fileRefLabel) {
+            fileRefLabel.innerHTML = 'File Reference';
+            fileRefLabel.classList.remove('required');
+        }
+        if (postalTariffLabel) {
+            postalTariffLabel.innerHTML = 'Postal Tariff';
+            postalTariffLabel.classList.remove('required');
+        }
+        
     } else {
         // Hide inward fields
         inwardFields.forEach(id => {
@@ -1779,11 +1801,25 @@ function toggleFormFields(entryType) {
             if (element) element.style.display = 'block';
         });
         
-        // Set required attributes
+        // Set required attributes for Outward - ALL fields mandatory
         setFieldRequired('fromWhom', false);
         setFieldRequired('takenBy', false);
         setFieldRequired('toWhom', true);
         setFieldRequired('sentBy', true);
+        setFieldRequired('caseClosed', true);
+        setFieldRequired('dueDate', true);
+        setFieldRequired('fileReference', true);
+        setFieldRequired('postalTariff', true);
+        
+        // Update labels to show required
+        if (fileRefLabel) {
+            fileRefLabel.innerHTML = 'File Reference';
+            fileRefLabel.classList.add('required');
+        }
+        if (postalTariffLabel) {
+            postalTariffLabel.innerHTML = 'Postal Tariff';
+            postalTariffLabel.classList.add('required');
+        }
     }
 }
 
@@ -3302,20 +3338,53 @@ function toggleEditFormFields(entryType) {
     const inwardFields = ['editInwardNoGroup', 'editFromWhomGroup', 'editTakenByGroup', 'editActionTakenGroup'];
     const outwardFields = ['editOutwardNoGroup', 'editToWhomGroup', 'editSentByGroup', 'editCaseClosedGroup', 'editDueDateGroup'];
     
+    // Get label elements
+    const fileRefLabel = document.getElementById('editFileRefLabel');
+    const postalTariffLabel = document.getElementById('editPostalTariffLabel');
+    
     if (entryType === 'Inward') {
         inwardFields.forEach(id => document.getElementById(id).style.display = 'block');
         outwardFields.forEach(id => document.getElementById(id).style.display = 'none');
+        
         document.getElementById('editFromWhom').required = true;
         document.getElementById('editTakenBy').required = true;
         document.getElementById('editToWhom').required = false;
         document.getElementById('editSentBy').required = false;
+        document.getElementById('editCaseClosed').required = false;
+        document.getElementById('editDueDate').required = false;
+        document.getElementById('editFileReference').required = false;
+        document.getElementById('editPostalTariff').required = false;
+        
+        if (fileRefLabel) {
+            fileRefLabel.innerHTML = 'File Reference';
+            fileRefLabel.classList.remove('required');
+        }
+        if (postalTariffLabel) {
+            postalTariffLabel.innerHTML = 'Postal Tariff';
+            postalTariffLabel.classList.remove('required');
+        }
+        
     } else {
         inwardFields.forEach(id => document.getElementById(id).style.display = 'none');
         outwardFields.forEach(id => document.getElementById(id).style.display = 'block');
+        
         document.getElementById('editFromWhom').required = false;
         document.getElementById('editTakenBy').required = false;
         document.getElementById('editToWhom').required = true;
         document.getElementById('editSentBy').required = true;
+        document.getElementById('editCaseClosed').required = true;
+        document.getElementById('editDueDate').required = true;
+        document.getElementById('editFileReference').required = true;
+        document.getElementById('editPostalTariff').required = true;
+        
+        if (fileRefLabel) {
+            fileRefLabel.innerHTML = 'File Reference';
+            fileRefLabel.classList.add('required');
+        }
+        if (postalTariffLabel) {
+            postalTariffLabel.innerHTML = 'Postal Tariff';
+            postalTariffLabel.classList.add('required');
+        }
     }
 }
 

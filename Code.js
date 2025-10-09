@@ -1797,6 +1797,18 @@ function validateEntryData(entryData, entryType) {
     if (!entryData.sentBy) {
       return { isValid: false, message: 'Sent By field is required for outward entries' };
     }
+    if (!entryData.caseClosed) {
+      return { isValid: false, message: 'Case Closed field is required for outward entries' };
+    }
+    if (!entryData.dueDate) {
+      return { isValid: false, message: 'Due Date field is required for outward entries' };
+    }
+    if (!entryData.fileReference) {
+      return { isValid: false, message: 'File Reference is required for outward entries' };
+    }
+    if (!entryData.postalTariff) {
+      return { isValid: false, message: 'Postal Tariff is required for outward entries' };
+    }
   }
   
   // Validate date
@@ -1812,9 +1824,9 @@ function validateEntryData(entryData, entryType) {
   return { isValid: true };
 }
 
-// =====================================================
-// ADMIN FUNCTIONS (Same as before)
-// =====================================================
+// ================ //
+// ADMIN FUNCTIONS  //
+// ================ //
 
 function openAdminPanel() {
   try {
@@ -3618,5 +3630,4 @@ function testPerformanceImprovements() {
   
   Logger.log('=== TEST COMPLETE ===');
 }
-
 
